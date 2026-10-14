@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国深度探索 · 实时交互路程规划与AI预测系统</title>
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --border-color: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-purple: #a855f7;
+            --danger: #ef4444;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        /* 左侧控制与AI面板 */
+        #sidebar {
+            width: 420px;
+            background-color: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.4);
+        }
+        .header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        .header h1 {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .stat-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            text-align: center;
+        }
+        .stat-val { font-size: 16px; font-weight: 700; color: var(--accent-green); }
+        .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+        .content-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin: 16px 0 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .section-title:first-child { margin-top: 0; }
+
+        /* AI 预测卡片 */
+        .ai-card {
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid var(--accent-amber);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .ai-card:hover {
+            border-color: var(--accent-blue);
+            transform: translateX(3px);
+        }
+        .ai-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .city-title { font-size: 15px; font-weight: 700; color: #fff; }
+        .score-badge {
+            background: rgba(245, 158, 11, 0.2);
+            color: var(--accent-amber);
+            border: 1px solid var(--accent-amber);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 12px;
+        }
+        .tags-row { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+        .tag {
+            font-size: 11px;
+            background: #334155;
+            color: #cbd5e1;
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+        .spots-text { font-size: 12px; color: var(--accent-blue); margin-bottom: 6px; }
+        .reason-text { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+        .card-actions {
+            margin-top: 8px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+        .btn {
+            background: var(--accent-blue);
+            color: #0f172a;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-outline {
+            background: transparent;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+        .btn-outline:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+        .btn-danger { background: var(--danger); color: #fff; }
+
+        /* 已访时间轴 */
+        .timeline {
+            position: relative;
+            padding-left: 18px;
+            border-left: 2px solid var(--accent-green);
+            margin-left: 8px;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 12px;
+            background: rgba(15, 23, 42, 0.5);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+        .timeline-item:hover { border-color: var(--accent-green); }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 12px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            border: 2px solid var(--bg-dark);
+        }
+        .timeline-item.current::before {
+            background: var(--accent-blue);
+            box-shadow: 0 0 8px var(--accent-blue);
+        }
+        .tl-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+        .tl-spots { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+        /* 底部工具栏 */
+        .footer-tools {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-dark);
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* 地图容器 */
+        #map-container { flex: 1; position: relative; }
+        #map { width: 100%; height: 100%; background: #0b1120; }
+
+        /* 地图悬浮控制栏 */
+        .map-overlay {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 1000;
+            background: rgba(30, 41, 59, 0.9);
+            backdrop-filter: blur(6px);
+            border: 1px solid var(--border-color);
+            padding: 10px 14px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+        /* 模态框 (添加节点 / LLM设置) */
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.active { display: flex; }
+        .modal-box {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            width: 460px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 8px 10px;
+            border-radius: 5px;
+            font-size: 13px;
+        }
+        /* 自定义气泡样式 */
+        .leaflet-popup-content-wrapper {
+            background: #1e293b;
+            color: #f8fafc;
+            border: 1px solid #475569;
+            border-radius: 8px;
+        }
+        .leaflet-popup-tip { background: #1e293b; }
+        .city-label-icon {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #475569;
+            color: #f8fafc;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .city-label-visited { border-color: #10b981; color: #34d399; }
+        .city-label-current { border-color: #38bdf8; background: #0284c7; color: #fff; }
+        .city-label-predict { border-color: #f59e0b; color: #fcd34d; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="header">
+        <h1>
+            <span>中国探索 · 实时路线规划与AI推演</span>
+            <button class="btn btn-outline" onclick="openModal('llmModal')" style="font-size:11px;">⚡ AI接口配置</button>
+        </h1>
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-val" id="stat-count">11</div>
+                <div class="stat-label">已解锁城市</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" id="stat-dist">0 km</div>
+                <div class="stat-label">累计折线里程</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" id="stat-current" style="color:var(--accent-blue);">武汉</div>
+                <div class="stat-label">当前所在锚点</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-scroll">
+        <div class="section-title">
+            <span>🔮 AI 下一站最优推演 (基于当前终点)</span>
+            <button class="btn btn-outline" onclick="triggerLLMAdvice()" style="padding:2px 6px;font-size:11px;">深度解说</button>
+        </div>
+        <div id="ai-Loading" style="display:none; font-size:12px; color:var(--accent-amber); margin-bottom:10px;">
+            正在调用大模型分析路径拓扑与季节物候...
+        </div>
+        <div id="llm-output" style="display:none; background:rgba(168,85,247,0.1); border:1px solid var(--accent-purple); padding:10px; border-radius:6px; font-size:12px; line-height:1.5; margin-bottom:12px;"></div>
+        <div id="predictions-list"></div>
+
+        <div class="section-title">
+            <span>📍 已完成足迹序列 (点击定位)</span>
+            <span style="font-size:11px; color:var(--accent-green);">支持动态顺延</span>
+        </div>
+        <div class="timeline" id="visited-timeline"></div>
+    </div>
+
+    <div class="footer-tools">
+        <button class="btn" onclick="openModal('addModal')">+ 添加/打卡新城市</button>
+        <button class="btn btn-outline" onclick="undoLastCity()">↩ 撤销上一步</button>
+        <button class="btn btn-outline" onclick="resetDefault()">🔄 重置初始11城</button>
+        <button class="btn btn-outline" onclick="exportData()">💾 导出JSON</button>
+    </div>
+</div>
+
+<div id="map-container">
+    <div class="map-overlay">
+        <div class="legend-item"><span class="dot" style="background:#10b981;"></span> 已游览节点</div>
+        <div class="legend-item"><span class="dot" style="background:#38bdf8; box-shadow:0 0 6px #38bdf8;"></span> 当前终点</div>
+        <div class="legend-item"><span class="dot" style="background:#f59e0b;"></span> AI 首推下一站</div>
+        <div class="legend-item"><span class="dot" style="background:#64748b;"></span> 候选探索库</div>
+        <button class="btn btn-outline" onclick="toggleBaseMap()" style="margin-left:8px;">🗺️ 切换底图(高德/暗色)</button>
+    </div>
+    <div id="map"></div>
+</div>
+
+<!-- 模态框：手动添加城市 -->
+<div class="modal" id="addModal">
+    <div class="modal-box">
+        <h3 style="margin-bottom:14px; color:var(--accent-blue);">添加自定义城市 / 景点节点</h3>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+            提示：你可以直接点击地图任意位置自动拾取经纬度，也可以从候选库选择或手动输入。
+        </p>
+        <div class="form-group">
+            <label>城市/目的地名称</label>
+            <input type="text" id="inp-name" placeholder="例如：景德镇 / 恩施 / 洛阳">
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div class="form-group">
+                <label>纬度 (Lat)</label>
+                <input type="number" step="0.0001" id="inp-lat" placeholder="30.5928">
+            </div>
+            <div class="form-group">
+                <label>经度 (Lng)</label>
+                <input type="number" step="0.0001" id="inp-lng" placeholder="114.3055">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>核心特色标签 (逗号分隔)</label>
+            <input type="text" id="inp-tags" placeholder="峡谷喀斯特, 土家文化, 地质奇观">
+        </div>
+        <div class="form-group">
+            <label>代表性必游景点</label>
+            <input type="text" id="inp-spots" placeholder="恩施大峡谷、屏山峡谷、土司城">
+        </div>
+        <div class="form-group">
+            <label>添加方式</label>
+            <select id="inp-mode">
+                <option value="visited">直接作为下一站纳入【已游览行程】</option>
+                <option value="candidate">仅加入【全国候选探索库】供AI推演</option>
+            </select>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+            <button class="btn btn-outline" onclick="closeModal('addModal')">取消</button>
+            <button class="btn" onclick="confirmAddCustomCity()">确认添加</button>
+        </div>
+    </div>
+</div>
+
+<!-- 模态框：大模型 API 配置 -->
+<div class="modal" id="llmModal">
+    <div class="modal-box">
+        <h3 style="margin-bottom:14px; color:var(--accent-purple);">配置大模型 API 实时推演 (可选)</h3>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+            系统内置了离线空间拓扑与多样性启发式算法，无需API即可实时推演。如需生成针对个人偏好的深度文本攻略，可填入兼容 OpenAI 格式的接口（如 DeepSeek / Gemini / OpenAI）。
+        </p>
+        <div class="form-group">
+            <label>API Base URL</label>
+            <input type="text" id="llm-url" value="https://api.deepseek.com/v1/chat/completions">
+        </div>
+        <div class="form-group">
+            <label>API Key (仅保存在本地浏览器)</label>
+            <input type="password" id="llm-key" placeholder="sk-...">
+        </div>
+        <div class="form-group">
+            <label>模型名称 (Model)</label>
+            <input type="text" id="llm-model" value="deepseek-chat">
+        </div>
+        <div class="form-group">
+            <label>个人旅行偏好补充约束</label>
+            <textarea id="llm-pref" rows="2">偏好古建筑、博物馆、硬核自然地貌（峡谷/山岳）与地道饮食，避开纯商业化人造古镇。</textarea>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px;">
+            <button class="btn btn-outline" onclick="closeModal('llmModal')">关闭</button>
+            <button class="btn" onclick="saveLLMConfig()">保存配置</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ================= 1. 初始已游览 11 城数据 =================
+const INITIAL_VISITED = [
+    { name: "深圳", lat: 22.5431, lng: 114.0579, tags: ["现代都市", "科技创新", "海滨走廊"], spots: "南头古城、深圳湾公园、前海、深圳美术馆新馆" },
+    { name: "香港", lat: 22.3193, lng: 114.1694, tags: ["国际都会", "维港夜景", "中西交融"], spots: "维多利亚港、太平山顶、中环历史街区、西九文化区" },
+    { name: "东莞", lat: 23.0207, lng: 113.7518, tags: ["近代史迹", "岭南园林", "制造名城"], spots: "鸦片战争博物馆(虎门炮台)、可园、松山湖" },
+    { name: "珠海", lat: 22.2710, lng: 113.5767, tags: ["百岛之市", "海滨休闲", "近代名人"], spots: "情侣路、日月贝、唐家湾古镇、港珠澳大桥" },
+    { name: "澳门", lat: 22.1987, lng: 113.5439, tags: ["世遗历史城区", "葡式建筑", "综合度假"], spots: "大三巴牌坊、妈阁庙、路环岛、威尼斯人/巴黎人" },
+    { name: "中山", lat: 22.5176, lng: 113.3928, tags: ["辛亥名人", "侨乡骑楼", "粤菜美食"], spots: "孙中山故居纪念馆、孙文西路步行街、詹园" },
+    { name: "广州", lat: 23.1291, lng: 113.2644, tags: ["千年商都", "秦汉南越", "西关风情"], spots: "南越王博物院、广东省博物馆、永庆坊、陈家祠、沙面" },
+    { name: "佛山", lat: 23.0215, lng: 113.1214, tags: ["武术醒狮", "粤剧发源", "岭南古建"], spots: "佛山祖庙、清晖园、南风古灶、西樵山" },
+    { name: "长沙", lat: 28.2282, lng: 112.9388, tags: ["楚汉名城", "湖湘书院", "革命史迹"], spots: "湖南博物院(马王堆)、岳麓书院、爱晚亭、橘子洲" },
+    { name: "萍乡", lat: 27.6229, lng: 113.8543, tags: ["高山草甸", "户外徒步", "工运摇篮"], spots: "武功山金顶草甸、安源路矿工人运动纪念馆、杨岐山" },
+    { name: "武汉", lat: 30.5928, lng: 114.3055, tags: ["九省通衢", "荆楚重镇", "大江大湖"], spots: "湖北省博物馆、黄鹤楼、东湖听涛、江汉路近代建筑群" }
+];
+
+// ================= 2. 全国特色候选城市与景点知识库 =================
+const CANDIDATE_DB = [
+    // 西线：峡江、喀斯特与巴蜀
+    { name: "荆州", lat: 30.3503, lng: 112.1900, direction: "西线·江汉三国", tags: ["楚国故都", "三国史迹", "古城墙"], spots: "荆州古城墙、荆州博物馆、楚王车马阵", autumnScore: 88, hubScore: 82, desc: "距离武汉仅1.2h高铁，完整保留明清城墙与顶级楚文化漆器文物，是西进三峡的最佳历史过渡站。" },
+    { name: "宜昌", lat: 30.6920, lng: 111.2865, direction: "西线·峡江门户", tags: ["三峡奇观", "水利工程", "峡江风光"], spots: "三峡大坝、三峡人家、西陵峡、清江画廊", autumnScore: 93, hubScore: 90, desc: "从江汉平原迈向高山大川的地理分界线，10-11月峡江秋高气爽，水体清澈，景观反差极大。" },
+    { name: "恩施", lat: 30.2722, lng: 109.4882, direction: "西线·武陵喀斯特", tags: ["绝壁峡谷", "喀斯特暗河", "土司文化"], spots: "恩施大峡谷(一炷香)、屏山峡谷、腾龙洞、鹿院坪", autumnScore: 92, hubScore: 80, desc: "拥有世界级峰丛峡谷与地下暗河，与珠三角都市群形成极致的地貌互补。" },
+    { name: "重庆", lat: 29.5630, lng: 106.5516, direction: "西线·立体山城", tags: ["8D魔幻山城", "世界石刻", "天坑地缝"], spots: "大足石刻、武隆天生三桥、三峡博物馆、洪崖洞/山城步道", autumnScore: 90, hubScore: 96, desc: "中国最具赛博朋克与立体空间感的超大型城市，兼具大足石刻艺术巅峰与武隆喀斯特地貌。" },
+    { name: "成都", lat: 30.5728, lng: 104.0668, direction: "西线·天府古蜀", tags: ["古蜀文明", "水利奇迹", "巴蜀慢生活"], spots: "三星堆博物馆(广汉)、金沙遗址、杜甫草堂、都江堰/青城山", autumnScore: 89, hubScore: 98, desc: "古蜀青铜文明与两千年无坝引水工程典范，同时是通往川西高原与云贵的超级枢纽。" },
+    { name: "襄阳", lat: 32.0090, lng: 112.1224, direction: "西北线·汉水重镇", tags: ["铁打襄阳", "三国古隆中", "唐城影视"], spots: "古隆中、襄阳古城墙与护城河、米公祠", autumnScore: 88, hubScore: 85, desc: "武汉西北方向1.5h直达，金庸笔下与历史真实的南北军事重镇，连接武当山与西安。" },
+    { name: "十堰(武当山)", lat: 32.4000, lng: 111.0000, direction: "西北线·道教祖庭", tags: ["道教名山", "明代古建群", "太极文化"], spots: "武当山金顶、紫霄宫、南岩宫、太子坡", autumnScore: 94, hubScore: 78, desc: "明代皇家敕建的悬崖道教古建筑群巅峰，深秋层林尽染，与道家哲学意境高度契合。" },
+
+    // 北线：中原古都与秦岭太行
+    { name: "洛阳", lat: 34.6197, lng: 112.4540, direction: "北线·十三朝古都", tags: ["石窟巅峰", "河洛根脉", "盛唐遗址"], spots: "龙门石窟、洛阳古墓博物馆、白马寺、二里头夏都博物馆、老君山", autumnScore: 95, hubScore: 91, desc: "武汉京广转徐兰高铁3h直达。拥有龙门石窟与全国唯一的古墓专题博物馆，10月老君山与伊水秋色极佳。" },
+    { name: "西安", lat: 34.3416, lng: 108.9398, direction: "北线·秦汉唐帝都", tags: ["华夏帝都", "秦皇汉武", "顶级文博"], spots: "秦始皇兵马俑、陕西历史博物馆、西安明城墙、西安碑林、大雁塔", autumnScore: 96, hubScore: 98, desc: "中国古代文明密度最高的都城，终南山古观音禅寺千年银杏与秦岭秋色正值最佳观赏窗口。" },
+    { name: "开封", lat: 34.7972, lng: 114.3076, direction: "北线·北宋东京", tags: ["北宋风华", "城摞城奇观", "黄河文化"], spots: "清明上河园、开封府、大相国寺、铁塔公园", autumnScore: 90, hubScore: 84, desc: "八朝古都，北宋东京梦华录实景还原地，10月正值开封菊花文化节全城盛放期。" },
+    { name: "安阳", lat: 36.0977, lng: 114.3928, direction: "北线·殷商甲骨", tags: ["甲骨文之乡", "殷墟遗址", "太行大峡谷"], spots: "殷墟博物馆新馆、中国文字博物馆、林州太行大峡谷、红旗渠", autumnScore: 93, hubScore: 80, desc: "殷墟新馆展陈极具震撼力，叠加西侧太行大峡谷10月中旬的万山红遍。" },
+
+    // 东线：赣北瓷都与皖南徽州
+    { name: "九江(庐山)", lat: 29.7051, lng: 115.9928, direction: "东线·匡庐奇秀", tags: ["人文圣山", "万国别墅", "江湖交汇"], spots: "庐山风景区(美庐/含鄱口/三叠泉)、白鹿洞书院、琵琶亭", autumnScore: 93, hubScore: 86, desc: "距离武汉仅1.5h车程，集中国山水诗画源头、宋代书院之首与近代政治风云别墅群于一体。" },
+    { name: "景德镇", lat: 29.2688, lng: 117.1784, direction: "东线·千年瓷都", tags: ["陶瓷艺术", "御窑遗址", "当代建筑"], spots: "中国陶瓷博物馆、御窑厂国家考古遗址公园、陶溪川、瑶里古镇", autumnScore: 91, hubScore: 85, desc: "极具独特性的手工艺与当代艺术聚落，红砖拱券的御窑博物馆建筑美学极佳。" },
+    { name: "婺源", lat: 29.2484, lng: 117.8614, direction: "东线·徽州晒秋", tags: ["篁岭晒秋", "徽派古村", "红枫晨雾"], spots: "篁岭古村、石城红枫、察关古桥、思溪延村", autumnScore: 98, hubScore: 78, desc: "10月中旬至11月下旬是婺源全年最顶峰的物候窗口（篁岭晒秋+石城红枫晨雾）。" },
+    { name: "黄山(徽州)", lat: 29.7147, lng: 118.3375, direction: "东线·皖南山水", tags: ["天下第一奇山", "徽派古建", "水墨村落"], spots: "黄山风景区、宏村、西递、呈坎、徽州古城", autumnScore: 97, hubScore: 88, desc: "皖南塔川秋色与黄山云海奇松组合，中国古典山水与宗族聚落建筑的集大成者。" },
+
+    // 西南延伸备选
+    { name: "桂林", lat: 25.2736, lng: 110.2902, direction: "西南线·峰林漓江", tags: ["峰林喀斯特", "漓江山水", "龙脊梯田"], spots: "漓江百里画廊、阳朔遇龙河、龙脊梯田、靖江王城", autumnScore: 90, hubScore: 86, desc: "典型峰林峰丛地貌，10月中下旬龙脊梯田金黄稻浪尚未完全收割。" },
+    { name: "贵阳(黔南)", lat: 26.6470, lng: 106.6302, direction: "西南线·喀斯特高原", tags: ["大瀑布", "天眼工程", "阳明心学"], spots: "黄果树瀑布、荔波小七孔、修文阳明洞、青岩古镇", autumnScore: 87, hubScore: 90, desc: "王阳明龙场悟道之地，汇聚世界级喀斯特瀑布群与射电望远镜工程。" }
+];
+
+// ================= 3. 状态管理与地图初始化 =================
+let visitedCities = [];
+let customCandidates = [];
+let map, baseLayerGaode, baseLayerDark, currentBase = 'gaode';
+let routeLineVisited, markersLayer, predictLayer;
+
+function loadState() {
+    const saved = localStorage.getItem('china_travel_visited_v1');
+    if (saved) {
+        try { visitedCities = JSON.parse(saved); } catch(e) { visitedCities = [...INITIAL_VISITED]; }
+    } else {
+        visitedCities = [...INITIAL_VISITED];
+    }
+    const savedCand = localStorage.getItem('china_travel_candidates_v1');
+    if (savedCand) {
+        try { customCandidates = JSON.parse(savedCand); } catch(e) { customCandidates = []; }
+    }
+}
+
+function saveState() {
+    localStorage.setItem('china_travel_visited_v1', JSON.stringify(visitedCities));
+    localStorage.setItem('china_travel_candidates_v1', JSON.stringify(customCandidates));
+}
+
+function initMap() {
+    map = L.map('map', { zoomControl: false }).setView([28.5, 113.5], 6);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // 高德中文瓦片（国内极速直连）
+    baseLayerGaode = L.tileLayer('https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+        maxZoom: 18,
+        attribution: '© 高德地图'
+    });
+
+    // CartoDB Dark Matter（暗黑极客风）
+    baseLayerDark = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap & CartoDB'
+    });
+
+    baseLayerGaode.addTo(map);
+
+    markersLayer = L.layerGroup().addTo(map);
+    predictLayer = L.layerGroup().addTo(map);
+
+    // 点击地图拾取坐标
+    map.on('click', function(e) {
+        document.getElementById('inp-lat').value = e.latlng.lat.toFixed(4);
+        document.getElementById('inp-lng').value = e.latlng.lng.toFixed(4);
+    });
+}
+
+function toggleBaseMap() {
+    if (currentBase === 'gaode') {
+        map.removeLayer(baseLayerGaode);
+        baseLayerDark.addTo(map);
+        currentBase = 'dark';
+    } else {
+        map.removeLayer(baseLayerDark);
+        baseLayerGaode.addTo(map);
+        currentBase = 'gaode';
+    }
+}
+
+// ================= 4. 空间距离与多因子 AI 预测引擎 =================
+function getDistanceKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function computePredictions() {
+    if (visitedCities.length === 0) return [];
+    const currentCity = visitedCities[visitedCities.length - 1];
+    const visitedNames = new Set(visitedCities.map(c => c.name));
+
+    // 提取最近 3 个已访城市的标签，用于计算审美疲劳度与景观多样性增益
+    const recentTags = new Set();
+    visitedCities.slice(-3).forEach(c => (c.tags || []).forEach(t => recentTags.add(t)));
+
+    const allPool = [...CANDIDATE_DB, ...customCandidates].filter(c => !visitedNames.has(c.name));
+
+    const scored = allPool.map(cand => {
+        const dist = getDistanceKm(currentCity.lat, currentCity.lng, cand.lat, cand.lng);
+
+        // 1. 距离适配得分 (120km - 500km 为最佳高铁单次跃迁区间)
+        let distScore = 0;
+        if (dist >= 100 && dist <= 450) {
+            distScore = 100 - Math.abs(dist - 260) * 0.08;
+        } else if (dist > 450 && dist <= 800) {
+            distScore = 82 - (dist - 450) * 0.09;
+        } else {
+            distScore = Math.max(25, 50 - dist * 0.03);
+        }
+
+        // 2. 防止折返惩罚 (如果候选城市距离倒数第2、3个城市比当前城市更近，说明在走回头路)
+        let backtrackPenalty = 0;
+        if (visitedCities.length >= 3) {
+            const prev2 = visitedCities[visitedCities.length - 3];
+            const distToPrev = getDistanceKm(prev2.lat, prev2.lng, cand.lat, cand.lng);
+            if (distToPrev < dist * 0.75) backtrackPenalty = 18;
+        }
+
+        // 3. 景观与文化多样性增益
+        let overlap = 0;
+        (cand.tags || []).forEach(t => { if (recentTags.has(t)) overlap++; });
+        const diversityScore = overlap === 0 ? 96 : (overlap === 1 ? 80 : 65);
+
+        // 4. 季节物候与交通枢纽权重
+        const autumn = cand.autumnScore || 85;
+        const hub = cand.hubScore || 80;
+
+        const totalScore = Math.round(
+            distScore * 0.42 +
+            diversityScore * 0.25 +
+            autumn * 0.20 +
+            hub * 0.13 -
+            backtrackPenalty
+        );
+
+        return {
+            ...cand,
+            distKm: Math.round(dist),
+            hsrHours: (dist / 230).toFixed(1),
+            totalScore: Math.min(99, Math.max(50, totalScore))
+        };
+    });
+
+    scored.sort((a, b) => b.totalScore - a.totalScore);
+    return scored;
+}
+
+// ================= 5. 渲染视图与地图图层 =================
+function renderAll() {
+    markersLayer.clearLayers();
+    predictLayer.clearLayers();
+
+    // 1. 计算累计里程
+    let totalKm = 0;
+    const latlngs = [];
+    visitedCities.forEach((c, idx) => {
+        latlngs.push([c.lat, c.lng]);
+        if (idx > 0) {
+            totalKm += getDistanceKm(visitedCities[idx-1].lat, visitedCities[idx-1].lng, c.lat, c.lng);
+        }
+    });
+
+    document.getElementById('stat-count').innerText = visitedCities.length;
+    document.getElementById('stat-dist').innerText = Math.round(totalKm) + ' km';
+    const lastCity = visitedCities[visitedCities.length - 1];
+    document.getElementById('stat-current').innerText = lastCity ? lastCity.name : '无';
+
+    // 2. 绘制已游览实线轨迹
+    if (latlngs.length > 1) {
+        L.polyline(latlngs, {
+            color: '#10b981',
+            weight: 4,
+            opacity: 0.9
+        }).addTo(markersLayer);
+    }
+
+    // 3. 绘制已游览城市节点与时间轴
+    const timelineEl = document.getElementById('visited-timeline');
+    timelineEl.innerHTML = '';
+
+    visitedCities.forEach((c, idx) => {
+        const isCurrent = idx === visitedCities.length - 1;
+        const markerColor = isCurrent ? '#38bdf8' : '#10b981';
+
+        const circle = L.circleMarker([c.lat, c.lng], {
+            radius: isCurrent ? 9 : 6,
+            fillColor: markerColor,
+            color: '#0f172a',
+            weight: 2,
+            fillOpacity: 1
+        }).addTo(markersLayer);
+
+        // 城市序号与名称标签
+        const labelClass = isCurrent ? 'city-label-icon city-label-current' : 'city-label-icon city-label-visited';
+        const label = L.divIcon({
+            className: '',
+            html: `<div class="${labelClass}">${idx + 1}. ${c.name}</div>`,
+            iconAnchor: [-10, 10]
+        });
+        L.marker([c.lat, c.lng], { icon: label }).addTo(markersLayer);
+
+        circle.bindPopup(`
+            <div style="min-width:200px;">
+                <div style="font-weight:700; font-size:14px; color:${markerColor}; margin-bottom:4px;">
+                    第 ${idx + 1} 站：${c.name} ${isCurrent ? '(当前所在)' : ''}
+                </div>
+                <div style="font-size:12px; color:#cbd5e1; margin-bottom:4px;"><b>特色：</b>${(c.tags||[]).join(' / ')}</div>
+                <div style="font-size:12px; color:#94a3b8;"><b>核心探索：</b>${c.spots || '暂无记录'}</div>
+            </div>
+        `);
+
+        // 左侧时间轴项
+        const item = document.createElement('div');
+        item.className = `timeline-item ${isCurrent ? 'current' : ''}`;
+        item.onclick = () => {
+            map.flyTo([c.lat, c.lng], 9, { duration: 0.8 });
+            circle.openPopup();
+        };
+        item.innerHTML = `
+            <div class="tl-header">
+                <span>${idx + 1}. ${c.name}</span>
+                <span style="font-size:11px; color:var(--accent-blue);">${(c.tags||[]).slice(0,2).join(' · ')}</span>
+            </div>
+            <div class="tl-spots">${c.spots || ''}</div>
+        `;
+        timelineEl.appendChild(item);
+    });
+
+    // 4. 运行 AI 预测并绘制候选分支
+    const predictions = computePredictions();
+    const topPredictions = predictions.slice(0, 4);
+    const predListEl = document.getElementById('predictions-list');
+    predListEl.innerHTML = '';
+
+    predictions.forEach((pred, idx) => {
+        const isTop = idx < 4;
+        // 绘制地图上的候选节点
+        const cMarker = L.circleMarker([pred.lat, pred.lng], {
+            radius: isTop ? 7 : 4,
+            fillColor: isTop ? '#f59e0b' : '#64748b',
+            color: '#0f172a',
+            weight: 1.5,
+            fillOpacity: isTop ? 0.95 : 0.6
+        }).addTo(predictLayer);
+
+        if (isTop && lastCity) {
+            // 绘制从当前终点出发的 AI 预测虚线向量
+            L.polyline([[lastCity.lat, lastCity.lng], [pred.lat, pred.lng]], {
+                color: idx === 0 ? '#f59e0b' : '#38bdf8',
+                weight: idx === 0 ? 3 : 2,
+                dashArray: '6, 6',
+                opacity: idx === 0 ? 0.95 : 0.6
+            }).addTo(predictLayer);
+
+            const pLabel = L.divIcon({
+                className: '',
+                html: `<div class="city-label-icon city-label-predict">★ ${pred.name} (${pred.totalScore}分)</div>`,
+                iconAnchor: [-10, 10]
+            });
+            L.marker([pred.lat, pred.lng], { icon: pLabel }).addTo(predictLayer);
+        }
+
+        cMarker.bindPopup(`
+            <div style="min-width:220px;">
+                <div style="font-weight:700; font-size:14px; color:#f59e0b; margin-bottom:4px;">
+                    候选节点：${pred.name} (AI匹配度 ${pred.totalScore}%)
+                </div>
+                <div style="font-size:11px; color:#38bdf8; margin-bottom:4px;">
+                    距${lastCity ? lastCity.name : ''}约 ${pred.distKm} km (高铁约 ${pred.hsrHours}h)
+                </div>
+                <div style="font-size:12px; margin-bottom:4px;"><b>代表景点：</b>${pred.spots}</div>
+                <div style="font-size:11px; color:#94a3b8; margin-bottom:8px;">${pred.desc || ''}</div>
+                <button class="btn" style="width:100%;" onclick="addCityFromPrediction('${pred.name}')">
+                    + 设为下一站 (纳入行程并继续推演)
+                </button>
+            </div>
+        `);
+
+        // 左侧 Top 4 预测卡片
+        if (isTop) {
+            const card = document.createElement('div');
+            card.className = 'ai-card';
+            card.onclick = () => {
+                map.flyTo([pred.lat, pred.lng], 8, { duration: 0.8 });
+                cMarker.openPopup();
+            };
+            card.innerHTML = `
+                <div class="ai-card-header">
+                    <span class="city-title">${idx + 1}. ${pred.name} <small style="font-weight:400; font-size:11px; color:var(--text-muted);">${pred.direction || '推荐分支'}</small></span>
+                    <span class="score-badge">AI评分 ${pred.totalScore}</span>
+                </div>
+                <div class="tags-row">
+                    <span class="tag">📏 距${lastCity.name} ${pred.distKm}km (~${pred.hsrHours}h)</span>
+                    ${(pred.tags||[]).map(t => `<span class="tag">${t}</span>`).join('')}
+                </div>
+                <div class="spots-text">🎯 <b>核心景点：</b>${pred.spots}</div>
+                <div class="reason-text">${pred.desc || '空间连续性与景观互补性极佳。'}</div>
+                <div class="card-actions">
+                    <button class="btn" onclick="event.stopPropagation(); addCityFromPrediction('${pred.name}')">
+                        ✓ 纳入下一站
+                    </button>
+                </div>
+            `;
+            predListEl.appendChild(card);
+        }
+    });
+}
+
+// ================= 6. 交互控制动作 =================
+function addCityFromPrediction(cityName) {
+    const allPool = [...CANDIDATE_DB, ...customCandidates];
+    const target = allPool.find(c => c.name === cityName);
+    if (!target) return;
+
+    visitedCities.push({
+        name: target.name,
+        lat: target.lat,
+        lng: target.lng,
+        tags: target.tags,
+        spots: target.spots
+    });
+    saveState();
+    map.closePopup();
+    renderAll();
+    map.flyTo([target.lat, target.lng], 7, { duration: 0.9 });
+}
+
+function undoLastCity() {
+    if (visitedCities.length <= 1) {
+        alert("至少需要保留一个起点城市！");
+        return;
+    }
+    visitedCities.pop();
+    saveState();
+    renderAll();
+}
+
+function resetDefault() {
+    if (confirm("确定要重置回初始的 11 个已游览城市（深圳 -> 武汉）吗？")) {
+        visitedCities = [...INITIAL_VISITED];
+        saveState();
+        renderAll();
+        map.flyTo([28.5, 113.5], 6);
+    }
+}
+
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function confirmAddCustomCity() {
+    const name = document.getElementById('inp-name').value.trim();
+    const lat = parseFloat(document.getElementById('inp-lat').value);
+    const lng = parseFloat(document.getElementById('inp-lng').value);
+    const tags = document.getElementById('inp-tags').value.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    const spots = document.getElementById('inp-spots').value.trim();
+    const mode = document.getElementById('inp-mode').value;
+
+    if (!name || isNaN(lat) || isNaN(lng)) {
+        alert("请填写有效的城市名称与经纬度（可直接点击地图拾取坐标）！");
+        return;
+    }
+
+    const newNode = {
+        name, lat, lng,
+        tags: tags.length ? tags : ["特色探索"],
+        spots: spots || "自定义探索景点",
+        direction: "自定义节点",
+        autumnScore: 90,
+        hubScore: 85,
+        desc: "用户自定义添加的特色探索节点。"
+    };
+
+    if (mode === 'visited') {
+        visitedCities.push(newNode);
+    } else {
+        customCandidates.push(newNode);
+    }
+    saveState();
+    closeModal('addModal');
+    renderAll();
+    map.flyTo([lat, lng], 8);
+}
+
+function exportData() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(visitedCities, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", "china_travel_route.json");
+    dlAnchor.click();
+}
+
+// ================= 7. 可选大模型 API 实时解说 =================
+function saveLLMConfig() {
+    localStorage.setItem('llm_url', document.getElementById('llm-url').value.trim());
+    localStorage.setItem('llm_key', document.getElementById('llm-key').value.trim());
+    localStorage.setItem('llm_model', document.getElementById('llm-model').value.trim());
+    localStorage.setItem('llm_pref', document.getElementById('llm-pref').value.trim());
+    closeModal('llmModal');
+}
+
+async function triggerLLMAdvice() {
+    const key = localStorage.getItem('llm_key') || document.getElementById('llm-key').value.trim();
+    const url = localStorage.getItem('llm_url') || document.getElementById('llm-url').value.trim();
+    const model = localStorage.getItem('llm_model') || document.getElementById('llm-model').value.trim();
+    const pref = localStorage.getItem('llm_pref') || document.getElementById('llm-pref').value.trim();
+
+    const outBox = document.getElementById('llm-output');
+    const loader = document.getElementById('ai-Loading');
+
+    if (!key) {
+        openModal('llmModal');
+        return;
+    }
+
+    loader.style.display = 'block';
+    outBox.style.display = 'none';
+
+    const routeNames = visitedCities.map(c => c.name).join(' -> ');
+    const current = visitedCities[visitedCities.length - 1].name;
+    const prompt = `我目前正在进行环游中国计划，已按顺序游览：${routeNames}。当前位于【${current}】，时值10月中下旬。个人偏好：${pref}。请用精炼、硬核的语言（200字以内），给出接下来3站的最佳顺延路线及每个城市最不可错过的1-2个核心看点。`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${key}`
+            },
+            body: JSON.stringify({
+                model: model,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.6
+            })
+        });
+        const data = await res.json();
+        const reply = data.choices?.[0]?.message?.content || "未获取到有效返回，请检查API配置。";
+        outBox.innerHTML = `<b>🧠 大模型实时定制策略：</b><br>${reply.replace(/\n/g, '<br>')}`;
+        outBox.style.display = 'block';
+    } catch (err) {
+        outBox.innerHTML = `<span style="color:var(--danger);">调用失败：${err.message}</span>`;
+        outBox.style.display = 'block';
+    } finally {
+        loader.style.display = 'none';
+    }
+}
+
+// 启动初始化
+window.onload = () => {
+    loadState();
+    initMap();
+    renderAll();
+};
+</script>
+</body>
+</html>
